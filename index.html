@@ -1,0 +1,1999 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>巡檢任務與相片轉Word管理系統</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- docx.js for genuine Word .docx generation -->
+  <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* iOS smooth scrolling and safe areas */
+    body {
+      -webkit-tap-highlight-color: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans TC", sans-serif;
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .watermark-text {
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8);
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col items-center select-none">
+
+  <!-- Main Device Frame -->
+  <div class="w-full max-w-lg min-h-screen bg-slate-50 flex flex-col shadow-2xl relative pb-20">
+
+    <!-- Top Navigation Bar -->
+    <header class="sticky top-0 z-30 bg-slate-900 text-white px-4 py-3.5 flex items-center justify-between shadow-md">
+      <div class="flex items-center space-x-2">
+        <button id="navBackBtn" onclick="goBack()" class="hidden p-2 -ml-1 text-slate-300 hover:text-white rounded-full hover:bg-slate-800 transition">
+          <i class="fa-solid fa-arrow-left text-lg"></i>
+        </button>
+        <div>
+          <h1 id="headerTitle" class="text-lg font-bold tracking-wide flex items-center gap-2">
+            <i class="fa-solid fa-clipboard-check text-blue-400"></i>
+            <span>巡檢任務系統</span>
+          </h1>
+          <p id="headerSubtitle" class="text-xs text-slate-400">照片管理與Word報告排版</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2" id="headerActions">
+        <button onclick="openTemplateManager()" title="管理預設任務模板" class="text-xs bg-slate-800 hover:bg-slate-700 text-blue-300 px-2.5 py-1.5 rounded-lg border border-slate-700 flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-sliders"></i>
+          <span>模板庫</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white px-4 py-2.5 rounded-xl shadow-lg border border-slate-700 text-sm flex items-center space-x-2 transition-all duration-300 opacity-0 pointer-events-none transform -translate-y-2">
+      <i id="toastIcon" class="fa-solid fa-check-circle text-emerald-400"></i>
+      <span id="toastMsg">操作成功</span>
+    </div>
+
+    <!-- ==================== VIEW 1: HOME (任務列表) ==================== -->
+    <section id="viewHome" class="flex-1 p-4 space-y-4">
+      
+      <!-- Quick Action Cards -->
+      <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-4 text-white shadow-lg shadow-blue-500/20">
+        <div class="flex justify-between items-start">
+          <div>
+            <span class="text-xs uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full font-medium">快速開案</span>
+            <h2 class="text-xl font-bold mt-1">開始新的檢驗任務</h2>
+            <p class="text-xs text-blue-100 mt-0.5">點擊新增或套用預設任務模板</p>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-folder-plus"></i>
+          </div>
+        </div>
+        <div class="mt-4 flex gap-2">
+          <button onclick="openNewTaskModal()" class="flex-1 bg-white text-blue-700 font-semibold py-2 px-3 rounded-xl text-sm shadow hover:bg-blue-50 active:scale-95 transition flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-plus"></i> 新增任務
+          </button>
+        </div>
+      </div>
+
+      <!-- Task List Header -->
+      <div class="flex items-center justify-between pt-1">
+        <h3 class="font-bold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-list-check text-slate-500"></i> 
+          任務清單
+          <span id="taskCountBadge" class="bg-slate-200 text-slate-700 text-xs px-2 py-0.5 rounded-full font-semibold">0</span>
+        </h3>
+        <span class="text-xs text-slate-500">點選進入第二層拍攝</span>
+      </div>
+
+      <!-- Task Items Container -->
+      <div id="taskListContainer" class="space-y-3 pb-8">
+        <!-- Injected dynamically by JS -->
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 2: TASK DETAIL (點選項目與照片) ==================== -->
+    <section id="viewTaskDetail" class="flex-1 p-4 space-y-4 hidden">
+      
+      <!-- Current Task Meta Info -->
+      <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="flex items-center gap-2">
+              <span id="taskTypeBadge" class="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-md font-medium">一般任務</span>
+              <span id="taskDateLabel" class="text-xs text-slate-400">2026/09/22</span>
+            </div>
+            <div class="flex items-center gap-2 mt-1">
+              <h2 id="detailTaskTitle" class="text-lg font-bold text-slate-900">輪機例行巡檢</h2>
+              <button onclick="openEditTaskModal(currentTaskId)" title="修改任務名稱" class="text-slate-400 hover:text-blue-600 p-1 text-sm rounded hover:bg-slate-100 transition">
+                <i class="fa-solid fa-pen-to-square"></i>
+              </button>
+            </div>
+          </div>
+          <!-- Action Buttons from Detail -->
+          <div class="flex items-center gap-1.5">
+            <button onclick="openSaveAsTemplateModal(currentTaskId)" title="將此任務項目架構存為預設模板(不含照片)" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold px-2.5 py-2 rounded-xl flex items-center gap-1 shadow-sm active:scale-95 transition">
+              <i class="fa-solid fa-copy"></i>
+              <span>存為模板</span>
+            </button>
+            <button onclick="promptExportWord(currentTaskId)" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-sm active:scale-95 transition">
+              <i class="fa-solid fa-file-word text-sm"></i>
+              <span>產出Word</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Progress stats -->
+        <div class="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-slate-100 text-center">
+          <div class="bg-slate-50 p-2 rounded-xl">
+            <span class="block text-[11px] text-slate-500">項目數量</span>
+            <span id="statCategoryCount" class="text-sm font-bold text-slate-800">6</span>
+          </div>
+          <div class="bg-blue-50 p-2 rounded-xl">
+            <span class="block text-[11px] text-blue-600">一般照片</span>
+            <span id="statNormalCount" class="text-sm font-bold text-blue-700">0</span>
+          </div>
+          <div class="bg-rose-50 p-2 rounded-xl">
+            <span class="block text-[11px] text-rose-600">缺失照片</span>
+            <span id="statDefectCount" class="text-sm font-bold text-rose-700">0</span>
+          </div>
+          <div class="bg-amber-50 p-2 rounded-xl">
+            <span class="block text-[11px] text-amber-600">報告用</span>
+            <span id="statReportCount" class="text-sm font-bold text-amber-700">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Categories & Photo management header -->
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="font-bold text-slate-800 flex items-center gap-1.5">
+            <i class="fa-solid fa-tags text-indigo-500"></i>
+            巡檢點選項目
+          </h3>
+          <p class="text-[11px] text-slate-500">項目順序即為Word檔輸出排版之前後順序</p>
+        </div>
+        <button onclick="openAddCategoryModal()" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-semibold px-2.5 py-1.5 rounded-lg border border-indigo-200 flex items-center gap-1">
+          <i class="fa-solid fa-plus"></i> 新增項目
+        </button>
+      </div>
+
+      <!-- Categories List (Sorted) -->
+      <div id="categoryListContainer" class="space-y-3 pb-8">
+        <!-- Injected dynamically -->
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ==================== MODAL: 新增/編輯任務 ==================== -->
+  <div id="modalNewTask" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 hidden transition-opacity">
+    <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+        <h3 class="font-bold text-lg text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-folder-plus text-blue-600"></i>
+          建立新巡檢任務
+        </h3>
+        <button onclick="closeModal('modalNewTask')" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4 mt-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">任務名稱 *</label>
+          <input type="text" id="inputTaskName" placeholder="例如: 2026年9月主機與電氣設備巡檢" class="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">快速套用預設任務模板</label>
+          <div class="grid grid-cols-1 gap-2" id="templateOptionsContainer">
+            <!-- Injected -->
+          </div>
+        </div>
+
+        <div class="pt-3 flex gap-2">
+          <button onclick="closeModal('modalNewTask')" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl text-sm transition">
+            取消
+          </button>
+          <button onclick="confirmCreateTask()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm shadow-md transition flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-check"></i> 建立任務
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: 修改任務名稱 ==================== -->
+  <div id="modalEditTask" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-pen-to-square text-blue-600"></i>
+          修改任務名稱
+        </h3>
+        <button onclick="closeModal('modalEditTask')" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 mt-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">任務名稱 *</label>
+          <input type="text" id="inputEditTaskName" placeholder="輸入新的任務名稱" class="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+
+        <div class="pt-2 flex gap-2">
+          <button onclick="closeModal('modalEditTask')" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 rounded-xl text-xs transition">
+            取消
+          </button>
+          <button onclick="confirmEditTaskName()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-xl text-xs shadow-md transition flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-check"></i> 儲存名稱
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: 模板管理 (XX類型專用) ==================== -->
+  <div id="modalTemplates" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl max-h-[85vh] flex flex-col">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+        <div>
+          <h3 class="font-bold text-lg text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-sliders text-indigo-600"></i>
+            任務模板設定
+          </h3>
+          <p class="text-xs text-slate-500">可新增「XX類型專用」並預設點選項目</p>
+        </div>
+        <button onclick="closeModal('modalTemplates')" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Add template field -->
+      <div class="my-3 p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+        <span class="text-xs font-bold text-slate-700">新增模板</span>
+        <input type="text" id="inputNewTemplateName" placeholder="例如: 港勤拖船類型專用" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500">
+        <input type="text" id="inputNewTemplateCats" placeholder="項目(以逗點分隔): 主機,電機,空調間,管路" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500">
+        <button onclick="addCustomTemplate()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold py-2 rounded-lg transition">
+          + 新增至預設庫
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto space-y-2 pr-1" id="templateManagerList">
+        <!-- Injected -->
+      </div>
+
+      <div class="pt-3 border-t border-slate-100 mt-2">
+        <button onclick="closeModal('modalTemplates')" class="w-full bg-slate-100 text-slate-700 font-semibold py-2 rounded-xl text-sm">
+          關閉
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: 將既有任務複製另存為預設模板 (不含照片) ==================== -->
+  <div id="modalSaveAsTemplate" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-copy text-indigo-600"></i>
+          另存為預設任務模板
+        </h3>
+        <button onclick="closeModal('modalSaveAsTemplate')" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 mt-3">
+        <div class="p-2.5 bg-blue-50/70 border border-blue-100 rounded-xl text-xs text-blue-800">
+          <i class="fa-solid fa-circle-info mr-1 text-blue-600"></i>
+          系統將<b>複製此任務的點選項目與順序</b>存為模板，<b>照片完全不會被複製</b>。日後開新任務即可直接套用！
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">模板名稱 (可自訂為 XX類型專用) *</label>
+          <input type="text" id="inputSaveTemplateName" placeholder="例如: 散裝船主機類型專用" class="w-full text-xs px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">複製之項目清單 (可在此進一步增刪調整)</label>
+          <input type="text" id="inputSaveTemplateCats" placeholder="項目以逗號隔開" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          <p class="text-[11px] text-slate-400 mt-1">以逗號或空格分隔各項目</p>
+        </div>
+
+        <div class="pt-2 flex gap-2">
+          <button onclick="closeModal('modalSaveAsTemplate')" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 rounded-xl text-xs transition">
+            取消
+          </button>
+          <button onclick="confirmSaveTaskAsTemplate()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-xl text-xs shadow-md transition flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-check"></i> 儲存至模板庫
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: 新增/編輯項目名稱 ==================== -->
+  <div id="modalCategory" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl">
+      <h3 id="modalCategoryTitle" class="font-bold text-base text-slate-900 mb-2">新增點選項目</h3>
+      <p class="text-xs text-slate-500 mb-3">輸入項目名稱（例如: 主機、電機、舵機房等）</p>
+      <input type="text" id="inputCategoryName" placeholder="項目名稱" class="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none mb-4">
+      <div class="flex gap-2">
+        <button onclick="closeModal('modalCategory')" class="flex-1 bg-slate-100 text-slate-700 font-semibold py-2 rounded-xl text-sm">取消</button>
+        <button onclick="saveCategoryName()" class="flex-1 bg-indigo-600 text-white font-semibold py-2 rounded-xl text-sm shadow">確定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: 照片查閱與編輯 (照片清單) ==================== -->
+  <div id="modalPhotoGallery" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-2xl p-4 shadow-2xl max-h-[92vh] flex flex-col">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-200">
+        <div>
+          <h3 id="galleryCategoryName" class="font-bold text-base text-slate-900 flex items-center gap-1.5">
+            <i class="fa-solid fa-images text-blue-600"></i>
+            項目照片管理
+          </h3>
+          <p class="text-xs text-slate-500">可修改檔案名稱、切換一般/缺失標記</p>
+        </div>
+        <button onclick="closeModal('modalPhotoGallery')" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Quick Capture in Gallery Header -->
+      <div class="my-3 flex items-center justify-between bg-blue-50 p-3 rounded-xl border border-blue-100 gap-2">
+        <span class="text-xs font-semibold text-blue-900" id="gallerySummaryText">共 0 張照片</span>
+        <div class="flex items-center gap-1.5">
+          <button onclick="triggerCameraInput(activeGalleryCatId)" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow transition active:scale-95" title="開啟相機現場拍照">
+            <i class="fa-solid fa-camera"></i> <span>拍照</span>
+          </button>
+          <button onclick="triggerGalleryInput(activeGalleryCatId)" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow transition active:scale-95" title="一次選取多張照片上傳">
+            <i class="fa-solid fa-images"></i> <span>多選上傳</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Photos scroll list -->
+      <div id="galleryPhotoList" class="flex-1 overflow-y-auto space-y-3 pr-1 py-1">
+        <!-- Injected dynamically -->
+      </div>
+
+      <div class="pt-3 border-t border-slate-200 mt-2">
+        <button onclick="closeModal('modalPhotoGallery')" class="w-full bg-slate-800 text-white font-semibold py-2.5 rounded-xl text-sm">
+          完成返回
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: 轉生成WORD檔選項 (核心需求) ==================== -->
+  <div id="modalExportWord" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl">
+      <div class="text-center pb-3 border-b border-slate-100">
+        <div class="w-12 h-12 bg-blue-100 text-blue-700 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-2">
+          <i class="fa-solid fa-file-word"></i>
+        </div>
+        <h3 class="font-bold text-lg text-slate-900">生成 WORD 檢查報告</h3>
+        <p class="text-xs text-slate-500 mt-1">請選擇要匯入 Word 檔的照片類型</p>
+      </div>
+
+      <div class="space-y-3 my-4">
+        <!-- Option 1: 一般照片 -->
+        <label class="flex items-center p-3.5 border-2 rounded-xl cursor-pointer transition border-slate-200 hover:border-blue-300 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/60">
+          <input type="radio" name="exportPhotoType" value="normal" class="w-4 h-4 text-blue-600">
+          <div class="ml-3 flex-1">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-slate-800">僅產出「一般照片」</span>
+              <span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold" id="countExportNormal">0 張</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">匯出設備巡查常規狀態照片</p>
+          </div>
+        </label>
+
+        <!-- Option 2: 缺失照片 -->
+        <label class="flex items-center p-3.5 border-2 rounded-xl cursor-pointer transition border-slate-200 hover:border-rose-300 has-[:checked]:border-rose-600 has-[:checked]:bg-rose-50/60">
+          <input type="radio" name="exportPhotoType" value="defect" checked class="w-4 h-4 text-rose-600">
+          <div class="ml-3 flex-1">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-rose-900">僅產出「缺失照片」 (推薦)</span>
+              <span class="text-xs bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-semibold" id="countExportDefect">0 張</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">匯出異常、瑕疵或需要整改項之照片</p>
+          </div>
+        </label>
+
+        <!-- Option 3: 報告用照片 -->
+        <label class="flex items-center p-3.5 border-2 rounded-xl cursor-pointer transition border-slate-200 hover:border-amber-300 has-[:checked]:border-amber-600 has-[:checked]:bg-amber-50/60">
+          <input type="radio" name="exportPhotoType" value="report" class="w-4 h-4 text-amber-600">
+          <div class="ml-3 flex-1">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-amber-900">僅產出「報告用照片」</span>
+              <span class="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-semibold" id="countExportReport">0 張</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">匯出專為專案或主管呈報精選之照片</p>
+          </div>
+        </label>
+
+        <!-- Option 4: 全部照片 -->
+        <label class="flex items-center p-3.5 border-2 rounded-xl cursor-pointer transition border-slate-200 hover:border-slate-300 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/60">
+          <input type="radio" name="exportPhotoType" value="all" class="w-4 h-4 text-indigo-600">
+          <div class="ml-3 flex-1">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-slate-800">產出「全部照片」 (包含一般、缺失與報告用)</span>
+              <span class="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-semibold" id="countExportAll">0 張</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">完整整合所有項目的記錄</p>
+          </div>
+        </label>
+
+        <!-- Layout specs confirmation info box -->
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1">
+          <div class="font-bold text-slate-700 flex items-center gap-1">
+            <i class="fa-solid fa-ruler-combined text-slate-500"></i>
+            報告排版規格規格確認：
+          </div>
+          <div>• 版面配置：邊界設定為 <b>窄邊界 (0.5英吋 / 1.27公分)</b></div>
+          <div>• 表格設計：<b>欄數固定 2 欄</b>，列數依照片數遞增</div>
+          <div>• 檔名標註：每列照片下方一列插入<b>空白格並標註照片檔名</b></div>
+          <div>• 照片規格：統一橫式，尺寸固定 <b>寬 8 公分 × 高 6 公分</b></div>
+          <div>• 右下角壓印：已自動寫入拍照當天日期</div>
+        </div>
+      </div>
+
+      <div class="flex gap-2">
+        <button onclick="closeModal('modalExportWord')" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl text-sm transition">
+          取消
+        </button>
+        <button id="btnExecuteExport" onclick="executeWordExport()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm shadow-md transition flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-download"></i> 立即產出 .docx
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden Camera & File Inputs -->
+  <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden" onchange="handleCapturedPhotos(event)">
+  <input type="file" id="galleryInput" accept="image/*" multiple class="hidden" onchange="handleCapturedPhotos(event)">
+
+  <!-- Hidden Processing Canvas for Watermark & Orientation -->
+  <canvas id="imageCanvas" class="hidden"></canvas>
+
+  <script>
+    // System Constants & Templates
+    const DEFAULT_PRESET_TEMPLATES = [
+      {
+        id: 'tpl_marine_engine',
+        name: '輪機機艙巡檢專用',
+        categories: ['主機', '電機', '空調間', '冰機間', '緊急發電機', '前俥間']
+      },
+      {
+        id: 'tpl_deck_cargo',
+        name: '甲板設備巡檢專用',
+        categories: ['船首錨機', '繫泊設備', '救生艇筏', '貨艙通風', '甲板管路', '起重吊桿']
+      },
+      {
+        id: 'tpl_electric_safety',
+        name: '電氣安全巡檢專用',
+        categories: ['主配電盤', '應急配電盤', '電瓶室', '變壓器間', '照明設備', '警報系統']
+      }
+    ];
+
+    // Local Storage Keys
+    const STORAGE_KEY_TASKS = 'app_inspection_tasks_v2';
+    const STORAGE_KEY_TEMPLATES = 'app_inspection_templates_v2';
+
+    // App State
+    let appData = {
+      tasks: [],
+      templates: []
+    };
+
+    let currentTaskId = null;
+    let activeCameraCatId = null;
+    let activeGalleryCatId = null;
+    let editingCatId = null;
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadStorageData();
+      renderHomeView();
+    });
+
+    function loadStorageData() {
+      try {
+        const savedTemplates = localStorage.getItem(STORAGE_KEY_TEMPLATES);
+        if (savedTemplates) {
+          appData.templates = JSON.parse(savedTemplates);
+        } else {
+          appData.templates = JSON.parse(JSON.stringify(DEFAULT_PRESET_TEMPLATES));
+          saveTemplates();
+        }
+
+        const savedTasks = localStorage.getItem(STORAGE_KEY_TASKS);
+        if (savedTasks) {
+          appData.tasks = JSON.parse(savedTasks);
+        } else {
+          // Create initial demo task
+          createInitialTask();
+        }
+      } catch (e) {
+        console.error("Storage error:", e);
+        appData.templates = DEFAULT_PRESET_TEMPLATES;
+        appData.tasks = [];
+      }
+    }
+
+    function saveTasks() {
+      try {
+        localStorage.setItem(STORAGE_KEY_TASKS, JSON.stringify(appData.tasks));
+      } catch (err) {
+        showToast('儲存空間提醒：照片過多時建議儘早匯出Word', 'warning');
+      }
+    }
+
+    function saveTemplates() {
+      localStorage.setItem(STORAGE_KEY_TEMPLATES, JSON.stringify(appData.templates));
+    }
+
+    function createInitialTask() {
+      const todayStr = getTodayFormatted();
+      const defaultTpl = appData.templates[0] || DEFAULT_PRESET_TEMPLATES[0];
+      const initialTask = {
+        id: 'task_' + Date.now(),
+        name: '例行巡檢任務 - 輪機部',
+        templateName: defaultTpl.name,
+        createdDate: todayStr,
+        categories: defaultTpl.categories.map((name, index) => ({
+          id: 'cat_' + Date.now() + '_' + index,
+          name: name,
+          photos: []
+        }))
+      };
+      appData.tasks.push(initialTask);
+      saveTasks();
+    }
+
+    function getTodayFormatted() {
+      const d = new Date();
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}/${month}/${day}`;
+    }
+
+    function switchView(viewName) {
+      const viewHome = document.getElementById('viewHome');
+      const viewTaskDetail = document.getElementById('viewTaskDetail');
+      const navBackBtn = document.getElementById('navBackBtn');
+      const headerTitle = document.getElementById('headerTitle');
+      const headerSubtitle = document.getElementById('headerSubtitle');
+      const headerActions = document.getElementById('headerActions');
+
+      if (viewName === 'home') {
+        currentTaskId = null;
+        viewHome.classList.remove('hidden');
+        viewTaskDetail.classList.add('hidden');
+        navBackBtn.classList.add('hidden');
+        headerTitle.innerHTML = '<i class="fa-solid fa-clipboard-check text-blue-400"></i><span>巡檢任務系統</span>';
+        headerSubtitle.textContent = '照片管理與Word報告排版';
+        headerActions.classList.remove('hidden');
+        renderHomeView();
+      } else if (viewName === 'detail') {
+        viewHome.classList.add('hidden');
+        viewTaskDetail.classList.remove('hidden');
+        navBackBtn.classList.remove('hidden');
+        
+        const task = getTaskById(currentTaskId);
+        if (task) {
+          headerTitle.innerHTML = `<span class="truncate max-w-[200px]">${escapeHtml(task.name)}</span>`;
+          headerSubtitle.textContent = '點選項目拍照與管理';
+        }
+        headerActions.classList.add('hidden');
+        renderTaskDetailView();
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function goBack() {
+      switchView('home');
+    }
+
+    function getTaskById(id) {
+      return appData.tasks.find(t => t.id === id);
+    }
+
+    function renderHomeView() {
+      const container = document.getElementById('taskListContainer');
+      const badge = document.getElementById('taskCountBadge');
+      badge.textContent = appData.tasks.length;
+
+      if (appData.tasks.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-300">
+            <div class="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto text-2xl mb-3">
+              <i class="fa-regular fa-folder-open"></i>
+            </div>
+            <h4 class="font-bold text-slate-700">目前尚無巡檢任務</h4>
+            <p class="text-xs text-slate-400 mt-1 mb-4">點擊上方按鈕建立您的第一筆任務</p>
+            <button onclick="openNewTaskModal()" class="bg-blue-600 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow hover:bg-blue-700">
+              <i class="fa-solid fa-plus mr-1"></i> 新增任務
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = appData.tasks.map(task => {
+        let totalPhotos = 0;
+        let normalCount = 0;
+        let defectCount = 0;
+        let reportCount = 0;
+
+        task.categories.forEach(cat => {
+          if (cat.photos) {
+            totalPhotos += cat.photos.length;
+            cat.photos.forEach(p => {
+              const type = getPhotoType(p);
+              if (type === 'defect') defectCount++;
+              else if (type === 'report') reportCount++;
+              else normalCount++;
+            });
+          }
+        });
+
+        return `
+          <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow transition relative">
+            <div class="flex justify-between items-start">
+              <div onclick="openTaskDetail('${task.id}')" class="flex-1 cursor-pointer pr-3">
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium">
+                    ${escapeHtml(task.templateName || '專用任務')}
+                  </span>
+                  <span class="text-[11px] text-slate-400">
+                    <i class="fa-regular fa-calendar mr-0.5"></i> ${task.createdDate || getTodayFormatted()}
+                  </span>
+                </div>
+                <div class="flex items-center gap-1.5 mt-1.5">
+                  <h4 class="font-bold text-slate-900 text-base group-hover:text-blue-600 transition">
+                    ${escapeHtml(task.name)}
+                  </h4>
+                  <button onclick="event.stopPropagation(); openEditTaskModal('${task.id}')" title="修改任務名稱" class="text-slate-400 hover:text-blue-600 p-1 text-xs rounded hover:bg-slate-100 transition">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                  </button>
+                </div>
+                
+                <!-- Summary Tag Row -->
+                <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                  <span class="text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md">
+                    項目: <b>${task.categories.length}</b>
+                  </span>
+                  <span class="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md">
+                    一般: <b>${normalCount}</b>
+                  </span>
+                  <span class="text-[11px] ${defectCount > 0 ? 'bg-rose-50 text-rose-600 font-semibold' : 'bg-slate-50 text-slate-500'} px-2 py-0.5 rounded-md">
+                    缺失: <b>${defectCount}</b>
+                  </span>
+                  <span class="text-[11px] ${reportCount > 0 ? 'bg-amber-50 text-amber-700 font-semibold' : 'bg-slate-50 text-slate-500'} px-2 py-0.5 rounded-md">
+                    報告: <b>${reportCount}</b>
+                  </span>
+                </div>
+              </div>
+
+              <!-- Quick Action Dropdown/Buttons -->
+              <div class="flex flex-col items-end gap-1.5">
+                <button onclick="openSaveAsTemplateModal('${task.id}')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold px-2 py-1.5 rounded-xl flex items-center gap-1 shadow-sm transition active:scale-95" title="複製此任務項目為預設模板(不含照片)">
+                  <i class="fa-solid fa-copy"></i>
+                  <span>存為模板</span>
+                </button>
+                <button onclick="promptExportWord('${task.id}')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-2.5 py-1.5 rounded-xl flex items-center gap-1 shadow-sm transition active:scale-95" title="轉生成Word">
+                  <i class="fa-solid fa-file-word"></i>
+                  <span>轉Word</span>
+                </button>
+                <button onclick="deleteTask('${task.id}')" class="text-slate-400 hover:text-rose-500 p-1.5 transition text-xs" title="刪除任務">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Tap hint bar -->
+            <div onclick="openTaskDetail('${task.id}')" class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-blue-600 font-medium cursor-pointer">
+              <span>進入查看/拍照 (${totalPhotos} 張照片)</span>
+              <i class="fa-solid fa-chevron-right text-xs text-slate-400"></i>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    let editingTaskId = null;
+
+    function openEditTaskModal(taskId) {
+      editingTaskId = taskId || currentTaskId;
+      const task = getTaskById(editingTaskId);
+      if (!task) return;
+
+      const inputName = document.getElementById('inputEditTaskName');
+      inputName.value = task.name;
+      openModal('modalEditTask');
+      setTimeout(() => inputName.focus(), 100);
+    }
+
+    function confirmEditTaskName() {
+      if (!editingTaskId) return;
+      const task = getTaskById(editingTaskId);
+      if (!task) return;
+
+      const inputName = document.getElementById('inputEditTaskName');
+      const newName = inputName.value.trim();
+      if (!newName) {
+        showToast('請輸入任務名稱', 'warning');
+        return;
+      }
+
+      task.name = newName;
+      saveTasks();
+      closeModal('modalEditTask');
+
+      // Update both views if currently inside this task
+      if (currentTaskId === editingTaskId) {
+        document.getElementById('detailTaskTitle').textContent = newName;
+        const headerTitle = document.getElementById('headerTitle');
+        if (headerTitle) {
+          headerTitle.innerHTML = `<span class="truncate max-w-[200px]">${escapeHtml(newName)}</span>`;
+        }
+      }
+      renderHomeView();
+      showToast('任務名稱已修改成功！');
+    }
+
+    function openNewTaskModal() {
+      const inputName = document.getElementById('inputTaskName');
+      const today = getTodayFormatted();
+      inputName.value = `${today} 例行設備巡檢`;
+
+      const tplContainer = document.getElementById('templateOptionsContainer');
+      tplContainer.innerHTML = appData.templates.map((tpl, idx) => `
+        <label class="flex items-start p-2.5 border rounded-xl cursor-pointer hover:bg-slate-50 transition ${idx === 0 ? 'border-blue-500 bg-blue-50/40' : 'border-slate-200'}">
+          <input type="radio" name="selectedTemplateRadio" value="${tpl.id}" ${idx === 0 ? 'checked' : ''} class="mt-0.5 text-blue-600">
+          <div class="ml-2.5">
+            <span class="text-xs font-bold text-slate-800 block">${escapeHtml(tpl.name)}</span>
+            <span class="text-[11px] text-slate-500 block truncate max-w-[260px]">項目: ${tpl.categories.join('、')}</span>
+          </div>
+        </label>
+      `).join('');
+
+      openModal('modalNewTask');
+    }
+
+    function confirmCreateTask() {
+      const inputName = document.getElementById('inputTaskName');
+      const name = inputName.value.trim();
+      if (!name) {
+        showToast('請輸入任務名稱', 'warning');
+        return;
+      }
+
+      const selectedRadio = document.querySelector('input[name="selectedTemplateRadio"]:checked');
+      const templateId = selectedRadio ? selectedRadio.value : (appData.templates[0] ? appData.templates[0].id : null);
+      const template = appData.templates.find(t => t.id === templateId) || {
+        name: '自訂巡檢專用',
+        categories: ['主機', '電機', '空調間', '冰機間', '緊急發電機', '前俥間']
+      };
+
+      const newTask = {
+        id: 'task_' + Date.now(),
+        name: name,
+        templateName: template.name,
+        createdDate: getTodayFormatted(),
+        categories: template.categories.map((catName, idx) => ({
+          id: 'cat_' + Date.now() + '_' + idx,
+          name: catName,
+          photos: []
+        }))
+      };
+
+      appData.tasks.unshift(newTask);
+      saveTasks();
+      closeModal('modalNewTask');
+      showToast('任務建立成功！');
+      openTaskDetail(newTask.id);
+    }
+
+    function deleteTask(taskId) {
+      const task = getTaskById(taskId);
+      if (!task) return;
+      if (!window.confirm(`確定要刪除「${task.name}」及其中所有相片嗎？`)) {
+        return;
+      }
+      appData.tasks = appData.tasks.filter(t => t.id !== taskId);
+      saveTasks();
+      renderHomeView();
+      showToast('已刪除任務');
+    }
+
+    function openTemplateManager() {
+      renderTemplateList();
+      openModal('modalTemplates');
+    }
+
+    function renderTemplateList() {
+      const container = document.getElementById('templateManagerList');
+      container.innerHTML = appData.templates.map(tpl => `
+        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+          <div class="flex-1 pr-2">
+            <span class="text-xs font-bold text-slate-800">${escapeHtml(tpl.name)}</span>
+            <p class="text-[11px] text-slate-500 mt-0.5 truncate max-w-[200px]">預設: ${tpl.categories.join('、')}</p>
+          </div>
+          <div class="flex items-center gap-1">
+            <button onclick="promptEditTemplate('${tpl.id}')" class="text-slate-400 hover:text-indigo-600 p-1.5 text-xs rounded hover:bg-white transition" title="修改模板名稱與內容">
+              <i class="fa-solid fa-pen"></i>
+            </button>
+            <button onclick="deleteTemplate('${tpl.id}')" class="text-slate-400 hover:text-rose-600 p-1.5 text-xs rounded hover:bg-white transition" title="刪除模板">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    let targetTaskIdToTemplate = null;
+
+    // 開啟「將目前任務複製為預設模板 (XX類型專用)」對話框
+    function openSaveAsTemplateModal(taskId) {
+      targetTaskIdToTemplate = taskId || currentTaskId;
+      const task = getTaskById(targetTaskIdToTemplate);
+      if (!task) return;
+
+      const nameInput = document.getElementById('inputSaveTemplateName');
+      const catsInput = document.getElementById('inputSaveTemplateCats');
+
+      // 預設名稱為「XX類型專用」
+      const cleanedTaskName = task.name.replace(/^\d{4}\/\d{2}\/\d{2}\s*/, '');
+      nameInput.value = `${cleanedTaskName}類型專用`;
+
+      // 提取目前設定好的所有點選項目 (不含照片，只保留項目名稱與順序)
+      const categoryNames = (task.categories || []).map(c => c.name);
+      catsInput.value = categoryNames.join(', ');
+
+      openModal('modalSaveAsTemplate');
+    }
+
+    // 確認儲存為新預設模板
+    function confirmSaveTaskAsTemplate() {
+      const nameInput = document.getElementById('inputSaveTemplateName');
+      const catsInput = document.getElementById('inputSaveTemplateCats');
+
+      const templateName = nameInput.value.trim();
+      if (!templateName) {
+        showToast('請輸入模板名稱（例如：散裝船類型專用）', 'warning');
+        return;
+      }
+
+      const catsStr = catsInput.value.trim();
+      const categories = catsStr
+        .split(/[,，\s]+/)
+        .map(c => c.trim())
+        .filter(c => c.length > 0);
+
+      if (categories.length === 0) {
+        showToast('請至少保留一個檢驗項目', 'warning');
+        return;
+      }
+
+      const newTemplate = {
+        id: 'tpl_' + Date.now(),
+        name: templateName,
+        categories: categories // 純項目文字清單，完全無照片
+      };
+
+      appData.templates.push(newTemplate);
+      saveTemplates();
+      closeModal('modalSaveAsTemplate');
+      showToast(`已成功將任務架構存為預設模板「${templateName}」！`);
+    }
+
+    // 在模板庫中修改既有模板
+    function promptEditTemplate(tplId) {
+      const tpl = appData.templates.find(t => t.id === tplId);
+      if (!tpl) return;
+
+      const newName = prompt('請修改模板名稱：', tpl.name);
+      if (newName === null) return;
+      const trimmedName = newName.trim();
+      if (!trimmedName) {
+        showToast('模板名稱不可為空', 'warning');
+        return;
+      }
+
+      const newCatsStr = prompt('請修改點選項目清單（逗點隔開）：', tpl.categories.join(', '));
+      if (newCatsStr === null) return;
+      const categories = newCatsStr
+        .split(/[,，\s]+/)
+        .map(c => c.trim())
+        .filter(c => c.length > 0);
+
+      if (categories.length === 0) {
+        showToast('請至少設定一個點選項目', 'warning');
+        return;
+      }
+
+      tpl.name = trimmedName;
+      tpl.categories = categories;
+      saveTemplates();
+      renderTemplateList();
+      showToast('模板修改完成！');
+    }
+
+    function addCustomTemplate() {
+      const nameInput = document.getElementById('inputNewTemplateName');
+      const catsInput = document.getElementById('inputNewTemplateCats');
+      let name = nameInput.value.trim();
+      let catsStr = catsInput.value.trim();
+
+      if (!name) {
+        showToast('請輸入模板名稱（如: 貨櫃船機艙專用）', 'warning');
+        return;
+      }
+      if (!catsStr) {
+        catsStr = '主機,電機,空調間,冰機間,緊急發電機,前俥間';
+      }
+
+      const categories = catsStr.split(/[,，\s]+/).filter(c => c.trim().length > 0);
+
+      const newTpl = {
+        id: 'tpl_' + Date.now(),
+        name: name,
+        categories: categories
+      };
+
+      appData.templates.push(newTpl);
+      saveTemplates();
+      nameInput.value = '';
+      catsInput.value = '';
+      renderTemplateList();
+      showToast('已新增預設模板');
+    }
+
+    function deleteTemplate(tplId) {
+      if (appData.templates.length <= 1) {
+        showToast('至少保留一個預設模板', 'warning');
+        return;
+      }
+      appData.templates = appData.templates.filter(t => t.id !== tplId);
+      saveTemplates();
+      renderTemplateList();
+      showToast('已刪除模板');
+    }
+
+    function openTaskDetail(taskId) {
+      currentTaskId = taskId;
+      switchView('detail');
+    }
+
+    function renderTaskDetailView() {
+      const task = getTaskById(currentTaskId);
+      if (!task) {
+        switchView('home');
+        return;
+      }
+
+      document.getElementById('detailTaskTitle').textContent = task.name;
+      document.getElementById('taskTypeBadge').textContent = task.templateName || '檢驗任務';
+      document.getElementById('taskDateLabel').textContent = task.createdDate || getTodayFormatted();
+
+      let totalNormal = 0;
+      let totalDefect = 0;
+      let totalReport = 0;
+      task.categories.forEach(c => {
+        (c.photos || []).forEach(p => {
+          const type = getPhotoType(p);
+          if (type === 'defect') totalDefect++;
+          else if (type === 'report') totalReport++;
+          else totalNormal++;
+        });
+      });
+
+      document.getElementById('statCategoryCount').textContent = task.categories.length;
+      document.getElementById('statNormalCount').textContent = totalNormal;
+      document.getElementById('statDefectCount').textContent = totalDefect;
+      document.getElementById('statReportCount').textContent = totalReport;
+
+      const container = document.getElementById('categoryListContainer');
+      container.innerHTML = task.categories.map((cat, idx) => {
+        const photos = cat.photos || [];
+        const defectInCat = photos.filter(p => getPhotoType(p) === 'defect').length;
+        const reportInCat = photos.filter(p => getPhotoType(p) === 'report').length;
+        const normalInCat = photos.filter(p => getPhotoType(p) === 'normal').length;
+
+        // Preview images (show first 3 thumbnails with badges)
+        const thumbnailsHtml = photos.slice(0, 3).map(p => {
+          const type = getPhotoType(p);
+          let badgeHtml = '';
+          if (type === 'defect') badgeHtml = '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-rose-500 rounded-bl" title="缺失"></span>';
+          else if (type === 'report') badgeHtml = '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-amber-500 rounded-bl" title="報告用"></span>';
+          return `
+            <div class="w-12 h-9 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 flex-shrink-0 relative">
+              <img src="${p.dataUrl}" class="w-full h-full object-cover">
+              ${badgeHtml}
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm transition hover:border-indigo-200">
+            <!-- Category Header with Order Controls -->
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div class="flex items-center space-x-2">
+                <span class="w-6 h-6 rounded-full bg-indigo-50 text-indigo-700 font-bold text-xs flex items-center justify-center">
+                  ${idx + 1}
+                </span>
+                <span class="font-bold text-slate-800 text-sm">${escapeHtml(cat.name)}</span>
+                <button onclick="openEditCategoryModal('${cat.id}')" class="text-slate-400 hover:text-indigo-600 text-xs p-1" title="修改名稱">
+                  <i class="fa-solid fa-pen"></i>
+                </button>
+              </div>
+
+              <!-- Reorder buttons (順序會影響Word檔排序順序) -->
+              <div class="flex items-center space-x-1">
+                <button onclick="moveCategory('${cat.id}', -1)" ${idx === 0 ? 'disabled class="text-slate-200 p-1"' : 'class="text-slate-500 hover:text-indigo-600 p-1"'} title="往上移">
+                  <i class="fa-solid fa-arrow-up text-xs"></i>
+                </button>
+                <button onclick="moveCategory('${cat.id}', 1)" ${idx === task.categories.length - 1 ? 'disabled class="text-slate-200 p-1"' : 'class="text-slate-500 hover:text-indigo-600 p-1"'} title="往下移">
+                  <i class="fa-solid fa-arrow-down text-xs"></i>
+                </button>
+                <button onclick="deleteCategory('${cat.id}')" class="text-slate-400 hover:text-rose-500 p-1 text-xs" title="刪除項目">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Photo count & Thumbnails -->
+            <div class="py-2.5 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                ${thumbnailsHtml}
+                ${photos.length > 3 ? `<span class="text-xs text-slate-400 font-medium">+${photos.length - 3}</span>` : ''}
+                ${photos.length === 0 ? '<span class="text-xs text-slate-400 italic">尚無照片</span>' : ''}
+              </div>
+
+              <div class="text-right">
+                <div class="text-[11px] text-slate-600 flex flex-col items-end gap-0.5">
+                  <div>
+                    <span class="text-blue-600 font-semibold">${normalInCat} 一般</span> / 
+                    <span class="${defectInCat > 0 ? 'text-rose-600 font-semibold' : 'text-slate-400'}">${defectInCat} 缺失</span>
+                  </div>
+                  <div>
+                    <span class="${reportInCat > 0 ? 'text-amber-600 font-semibold' : 'text-slate-400'}">${reportInCat} 報告用</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons: 拍照 & 查閱修改照片 -->
+            <div class="pt-2 border-t border-slate-100 grid grid-cols-3 gap-1.5">
+              <button onclick="triggerCameraInput('${cat.id}')" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-1 rounded-xl text-xs flex items-center justify-center gap-1 shadow-sm active:scale-95 transition" title="現場單張拍照">
+                <i class="fa-solid fa-camera text-[11px]"></i>
+                <span>拍照</span>
+              </button>
+
+              <button onclick="triggerGalleryInput('${cat.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-1 rounded-xl text-xs flex items-center justify-center gap-1 shadow-sm active:scale-95 transition" title="從相簿一次多選多張相片">
+                <i class="fa-solid fa-images text-[11px]"></i>
+                <span>多選上傳</span>
+              </button>
+
+              <button onclick="openPhotoGallery('${cat.id}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 px-1 rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition">
+                <i class="fa-solid fa-list-check text-[11px]"></i>
+                <span>查閱(${photos.length})</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function moveCategory(catId, direction) {
+      const task = getTaskById(currentTaskId);
+      if (!task) return;
+      const idx = task.categories.findIndex(c => c.id === catId);
+      if (idx < 0) return;
+      const targetIdx = idx + direction;
+      if (targetIdx < 0 || targetIdx >= task.categories.length) return;
+
+      // Swap
+      const temp = task.categories[idx];
+      task.categories[idx] = task.categories[targetIdx];
+      task.categories[targetIdx] = temp;
+
+      saveTasks();
+      renderTaskDetailView();
+      showToast('已更新項目前後順序 (影響Word輸出)');
+    }
+
+    function openAddCategoryModal() {
+      editingCatId = null;
+      document.getElementById('modalCategoryTitle').textContent = '新增點選項目';
+      document.getElementById('inputCategoryName').value = '';
+      openModal('modalCategory');
+    }
+
+    function openEditCategoryModal(catId) {
+      const task = getTaskById(currentTaskId);
+      if (!task) return;
+      const cat = task.categories.find(c => c.id === catId);
+      if (!cat) return;
+
+      editingCatId = catId;
+      document.getElementById('modalCategoryTitle').textContent = '修改項目名稱';
+      document.getElementById('inputCategoryName').value = cat.name;
+      openModal('modalCategory');
+    }
+
+    function saveCategoryName() {
+      const name = document.getElementById('inputCategoryName').value.trim();
+      if (!name) {
+        showToast('請輸入項目名稱', 'warning');
+        return;
+      }
+
+      const task = getTaskById(currentTaskId);
+      if (!task) return;
+
+      if (editingCatId) {
+        const cat = task.categories.find(c => c.id === editingCatId);
+        if (cat) cat.name = name;
+      } else {
+        task.categories.push({
+          id: 'cat_' + Date.now(),
+          name: name,
+          photos: []
+        });
+      }
+
+      saveTasks();
+      closeModal('modalCategory');
+      renderTaskDetailView();
+      showToast('項目儲存成功');
+    }
+
+    function deleteCategory(catId) {
+      const task = getTaskById(currentTaskId);
+      if (!task) return;
+      const cat = task.categories.find(c => c.id === catId);
+      if (!cat) return;
+
+      if (!window.confirm(`確定要刪除「${cat.name}」及其中所有照片嗎？`)) {
+        return;
+      }
+
+      task.categories = task.categories.filter(c => c.id !== catId);
+      saveTasks();
+      renderTaskDetailView();
+      showToast('已刪除項目');
+    }
+
+    function triggerCameraInput(catId) {
+      activeCameraCatId = catId;
+      // Trigger camera capture
+      const cameraInput = document.getElementById('cameraInput');
+      cameraInput.value = '';
+      cameraInput.click();
+    }
+
+    // 觸發多選上傳 (支援從手機相簿一次勾選多張照片)
+    function triggerGalleryInput(catId) {
+      activeCameraCatId = catId;
+      const galleryInput = document.getElementById('galleryInput');
+      galleryInput.value = '';
+      galleryInput.click();
+    }
+
+    async function handleCapturedPhotos(event) {
+      const files = Array.from(event.target.files || []);
+      if (files.length === 0) return;
+
+      const task = getTaskById(currentTaskId);
+      if (!task) return;
+      const category = task.categories.find(c => c.id === activeCameraCatId);
+      if (!category) return;
+
+      if (!category.photos) category.photos = [];
+
+      showToast(`正在批次處理 ${files.length} 張照片 (統一橫式並壓印日期)...`, 'info');
+
+      let successCount = 0;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          if (files.length > 1) {
+            showToast(`正在批次處理第 ${i + 1}/${files.length} 張照片...`, 'info');
+          }
+          const processedDataUrl = await processPhotoWithWatermark(file);
+          
+          // Photo numbering rule: {CategoryName}_{NextIndex}
+          const photoIndex = category.photos.length + 1;
+          const defaultFileName = `${category.name}_${photoIndex}`;
+
+          const newPhoto = {
+            id: 'photo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5) + '_' + i,
+            fileName: defaultFileName,
+            dataUrl: processedDataUrl,
+            captureDate: getTodayFormatted(),
+            photoType: 'normal', // 'normal' | 'defect' | 'report'
+            isDefect: false
+          };
+
+          category.photos.push(newPhoto);
+          successCount++;
+        } catch (err) {
+          console.error("Failed to process photo:", err);
+        }
+      }
+
+      saveTasks();
+      renderTaskDetailView();
+      if (activeGalleryCatId === activeCameraCatId) {
+        renderGalleryPhotos();
+      }
+      showToast(`已成功一次性匯入 ${successCount} 張照片！`);
+    }
+
+    // Helper: Determine photo type safely across schema upgrades
+    function getPhotoType(photo) {
+      if (photo.photoType) return photo.photoType;
+      return photo.isDefect ? 'defect' : 'normal';
+    }
+
+    // Helper: Enforce Landscape (8:6 = 4:3), optimize resolution, and stamp pure WHITE date watermark on bottom-right corner
+    function processPhotoWithWatermark(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.getElementById('imageCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // Standard target size: 8cm x 6cm aspect ratio = 4:3.
+            // High resolution target for Word: 1200 x 900 px
+            const targetWidth = 1200;
+            const targetHeight = 900;
+
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+
+            // Clear background
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(0, 0, targetWidth, targetHeight);
+
+            // Compute center crop/fit to maintain landscape 4:3 without stretching
+            const imgAspect = img.width / img.height;
+            const targetAspect = targetWidth / targetHeight;
+
+            let drawW, drawH, drawX, drawY;
+            if (imgAspect > targetAspect) {
+              // Image is wider than 4:3 -> crop left/right
+              drawH = targetHeight;
+              drawW = targetHeight * imgAspect;
+              drawX = (targetWidth - drawW) / 2;
+              drawY = 0;
+            } else {
+              // Image is taller than 4:3 -> crop top/bottom
+              drawW = targetWidth;
+              drawH = targetWidth / imgAspect;
+              drawX = 0;
+              drawY = (targetHeight - drawH) / 2;
+            }
+
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+            // Watermark: Bottom Right Corner Date Stamp in PURE WHITE (#FFFFFF)
+            const todayStr = getTodayFormatted(); // e.g. "2026/09/22"
+            const fontSize = 36;
+            ctx.font = `bold ${fontSize}px "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+            ctx.textAlign = "right";
+            ctx.textBaseline = "bottom";
+
+            const marginX = targetWidth - 28;
+            const marginY = targetHeight - 24;
+
+            // Semi-transparent dark pill background for crisp contrast against any background
+            const textMetrics = ctx.measureText(todayStr);
+            const textWidth = textMetrics.width;
+            const bgPadX = 14;
+            const bgPadY = 8;
+
+            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+            ctx.roundRect(
+              marginX - textWidth - bgPadX, 
+              marginY - fontSize - bgPadY / 2, 
+              textWidth + (bgPadX * 2), 
+              fontSize + bgPadY + 4, 
+              8
+            );
+            ctx.fill();
+
+            // Date Text: Pure White Font
+            ctx.fillStyle = "#FFFFFF";
+            ctx.shadowColor = "rgba(0, 0, 0, 0.75)";
+            ctx.shadowOffsetX = 1;
+            ctx.shadowOffsetY = 1;
+            ctx.shadowBlur = 2;
+            ctx.fillText(todayStr, marginX, marginY);
+            ctx.shadowColor = "transparent";
+
+            // Export compressed JPEG
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            resolve(dataUrl);
+          };
+          img.onerror = reject;
+          img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function openPhotoGallery(catId) {
+      activeGalleryCatId = catId;
+      activeCameraCatId = catId;
+      renderGalleryPhotos();
+      openModal('modalPhotoGallery');
+    }
+
+    function renderGalleryPhotos() {
+      const task = getTaskById(currentTaskId);
+      if (!task) return;
+      const category = task.categories.find(c => c.id === activeGalleryCatId);
+      if (!category) return;
+
+      document.getElementById('galleryCategoryName').innerHTML = `
+        <i class="fa-solid fa-folder-open text-blue-600"></i>
+        ${escapeHtml(category.name)} - 照片查閱與編輯
+      `;
+
+      const photos = category.photos || [];
+      const normalNum = photos.filter(p => getPhotoType(p) === 'normal').length;
+      const defectNum = photos.filter(p => getPhotoType(p) === 'defect').length;
+      const reportNum = photos.filter(p => getPhotoType(p) === 'report').length;
+      document.getElementById('gallerySummaryText').textContent = `共 ${photos.length} 張 (一般:${normalNum} / 缺失:${defectNum} / 報告:${reportNum})`;
+
+      const listContainer = document.getElementById('galleryPhotoList');
+
+      if (photos.length === 0) {
+        listContainer.innerHTML = `
+          <div class="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
+            <i class="fa-solid fa-camera text-3xl text-slate-300 mb-2"></i>
+            <p class="text-xs text-slate-500 font-medium">該項目尚無照片</p>
+            <div class="flex items-center justify-center gap-2 mt-3">
+              <button onclick="triggerCameraInput('${category.id}')" class="bg-blue-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow active:scale-95 transition">
+                <i class="fa-solid fa-camera mr-1"></i> 相機拍照
+              </button>
+              <button onclick="triggerGalleryInput('${category.id}')" class="bg-indigo-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow active:scale-95 transition">
+                <i class="fa-solid fa-images mr-1"></i> 相簿多選上傳
+              </button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      listContainer.innerHTML = photos.map((photo, idx) => {
+        const pType = getPhotoType(photo);
+        return `
+        <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200 flex flex-col space-y-2.5">
+          <div class="flex items-start gap-3">
+            <!-- Photo Thumbnail with Watermark Preview -->
+            <div class="w-28 h-20 bg-black rounded-xl overflow-hidden flex-shrink-0 relative border border-slate-300 shadow-sm">
+              <img src="${photo.dataUrl}" class="w-full h-full object-cover">
+              <span class="absolute bottom-1 right-1 text-[9px] bg-black/70 text-white px-1.5 py-0.5 rounded font-mono shadow-sm">
+                ${photo.captureDate}
+              </span>
+            </div>
+
+            <!-- Metadata & Edit file name -->
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-bold text-slate-500">照片 #${idx + 1}</span>
+                <button onclick="deleteSinglePhoto('${category.id}', '${photo.id}')" class="text-slate-400 hover:text-rose-600 p-1 text-xs" title="刪除照片">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </div>
+
+              <!-- Editable File Name Input -->
+              <div class="mt-1">
+                <label class="block text-[10px] text-slate-500 font-medium">檔案名稱 (Word格內文字):</label>
+                <input type="text" value="${escapeHtml(photo.fileName)}" onchange="updatePhotoFileName('${category.id}', '${photo.id}', this.value)" class="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none text-slate-800 mt-0.5">
+              </div>
+            </div>
+          </div>
+
+          <!-- Toggle: 一般照片 vs 缺失照片 vs 報告用 -->
+          <div class="pt-2 border-t border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+            <span class="text-xs font-medium text-slate-700">照片屬性設定:</span>
+            <div class="inline-flex rounded-lg p-0.5 bg-slate-200 gap-0.5 self-start sm:self-auto">
+              <button onclick="setPhotoCategoryType('${category.id}', '${photo.id}', 'normal')" class="text-xs px-2.5 py-1 rounded-md font-semibold transition ${pType === 'normal' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}">
+                <i class="fa-solid fa-circle-check text-[10px] mr-1"></i>一般
+              </button>
+              <button onclick="setPhotoCategoryType('${category.id}', '${photo.id}', 'defect')" class="text-xs px-2.5 py-1 rounded-md font-semibold transition ${pType === 'defect' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}">
+                <i class="fa-solid fa-triangle-exclamation text-[10px] mr-1"></i>缺失
+              </button>
+              <button onclick="setPhotoCategoryType('${category.id}', '${photo.id}', 'report')" class="text-xs px-2.5 py-1 rounded-md font-semibold transition ${pType === 'report' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}">
+                <i class="fa-solid fa-file-contract text-[10px] mr-1"></i>報告用
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      }).join('');
+    }
+
+    function updatePhotoFileName(catId, photoId, newName) {
+      const task = getTaskById(currentTaskId);
+      if (!task) return;
+      const cat = task.categories.find(c => c.id === catId);
+      if (!cat) return;
+      const photo = cat.photos.find(p => p.id === photoId);
+      if (!photo) return;
+
+      photo.fileName = newName.trim() || `${cat.name}_1`;
+      saveTasks();
+      showToast('已更新照片檔案名稱');
+    }
+
+    function setPhotoCategoryType(catId, photoId, type) {
+      const task = getTaskById(currentTaskId);
+      if (!task) return;
+      const cat = task.categories.find(c => c.id === catId);
+      if (!cat) return;
+      const photo = cat.photos.find(p => p.id === photoId);
+      if (!photo) return;
+
+      photo.photoType = type;
+      photo.isDefect = (type === 'defect');
+      saveTasks();
+      renderGalleryPhotos();
+      renderTaskDetailView();
+    }
+
+    function setPhotoDefectStatus(catId, photoId, isDefect) {
+      setPhotoCategoryType(catId, photoId, isDefect ? 'defect' : 'normal');
+    }
+
+    function deleteSinglePhoto(catId, photoId) {
+      const task = getTaskById(currentTaskId);
+      if (!task) return;
+      const cat = task.categories.find(c => c.id === catId);
+      if (!cat) return;
+
+      cat.photos = cat.photos.filter(p => p.id !== photoId);
+      saveTasks();
+      renderGalleryPhotos();
+      renderTaskDetailView();
+      showToast('已刪除該照片');
+    }
+
+    let exportTaskIdTarget = null;
+
+    function promptExportWord(taskId) {
+      exportTaskIdTarget = taskId || currentTaskId;
+      const task = getTaskById(exportTaskIdTarget);
+      if (!task) return;
+
+      let normalCount = 0;
+      let defectCount = 0;
+      let reportCount = 0;
+      task.categories.forEach(c => {
+        (c.photos || []).forEach(p => {
+          const type = getPhotoType(p);
+          if (type === 'defect') defectCount++;
+          else if (type === 'report') reportCount++;
+          else normalCount++;
+        });
+      });
+
+      document.getElementById('countExportNormal').textContent = `${normalCount} 張`;
+      document.getElementById('countExportDefect').textContent = `${defectCount} 張`;
+      document.getElementById('countExportReport').textContent = `${reportCount} 張`;
+      document.getElementById('countExportAll').textContent = `${normalCount + defectCount + reportCount} 張`;
+
+      openModal('modalExportWord');
+    }
+
+    // Requirements:
+    // 1. Margin: Narrow (邊界窄: 0.5 in / 1.27 cm = 720 dxa)
+    // 2. Table: 2 columns fixed (欄數2: 永遠固定是2)
+    // 3. Rows: Every photo row is followed by a blank caption row with photo filename
+    // 4. Photo size: Height 6 cm, Width 8 cm
+    // 5. Photos: Landscape orientation uniform
+    // 6. Filter: 一般照片 / 缺失照片 / 報告用照片 / 全部
+    async function executeWordExport() {
+      const task = getTaskById(exportTaskIdTarget);
+      if (!task) {
+        showToast('找不到任務資料', 'warning');
+        return;
+      }
+
+      const selectedOption = document.querySelector('input[name="exportPhotoType"]:checked');
+      const exportType = selectedOption ? selectedOption.value : 'defect';
+
+      // Collect photos according to user-defined category order!
+      // (這些選項有前後順序，會影響word檔排序順序)
+      const exportItems = [];
+
+      task.categories.forEach((cat) => {
+        const catPhotos = cat.photos || [];
+        catPhotos.forEach((photo) => {
+          const pType = getPhotoType(photo);
+          let shouldInclude = false;
+          if (exportType === 'all') {
+            shouldInclude = true;
+          } else if (exportType === 'normal' && pType === 'normal') {
+            shouldInclude = true;
+          } else if (exportType === 'defect' && pType === 'defect') {
+            shouldInclude = true;
+          } else if (exportType === 'report' && pType === 'report') {
+            shouldInclude = true;
+          }
+
+          if (shouldInclude) {
+            exportItems.push({
+              categoryName: cat.name,
+              fileName: photo.fileName,
+              dataUrl: photo.dataUrl,
+              photoType: pType,
+              isDefect: photo.isDefect,
+              captureDate: photo.captureDate
+            });
+          }
+        });
+      });
+
+      if (exportItems.length === 0) {
+        const typeLabels = { defect: '缺失照片', normal: '一般照片', report: '報告用照片', all: '照片' };
+        showToast(`所選的條件（${typeLabels[exportType] || '照片'}）目前沒有任何照片可供產出！`, 'warning');
+        return;
+      }
+
+      const btn = document.getElementById('btnExecuteExport');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 正在排版產出 Word...';
+
+      try {
+        await generateGenuineDocx(task, exportItems, exportType);
+        closeModal('modalExportWord');
+        showToast('Word 檔案產出並下載成功！');
+      } catch (err) {
+        console.error("Docx generation error:", err);
+        // Fallback to HTML-based Word format
+        try {
+          generateHtmlWordDocument(task, exportItems, exportType);
+          closeModal('modalExportWord');
+          showToast('已使用 Word 相容格式下載成功！');
+        } catch (fallbackErr) {
+          console.error("Fallback error:", fallbackErr);
+          showToast('匯出失敗，請檢查照片格式', 'warning');
+        }
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-download"></i> 立即產出 .docx';
+      }
+    }
+
+    async function generateGenuineDocx(task, items, exportType) {
+      if (!window.docx) {
+        throw new Error("docx library not loaded");
+      }
+
+      const {
+        Document,
+        Packer,
+        Paragraph,
+        TextRun,
+        Table,
+        TableRow,
+        TableCell,
+        ImageRun,
+        AlignmentType,
+        WidthType,
+        BorderStyle,
+        HeadingLevel,
+        convertMillimetersToTwip
+      } = window.docx;
+
+      // 1. Narrow margins: 0.5 inch = 12.7 mm = 720 dxa
+      const narrowMarginTwip = 720;
+
+      // Photo dimensions in docx:
+      // Width: 8 cm = 80 mm = approx 302.36 pt/px
+      // Height: 6 cm = 60 mm = approx 226.77 pt/px
+      const imgWidthPx = 302;
+      const imgHeightPx = 227;
+
+      // Table column width: Page is approx 210mm (A4) - 25.4mm margins = 184.6mm
+      // Two equal columns: ~92.3mm each -> 5230 twips each
+      const colWidthTwip = 5230;
+
+      const typeTitleMap = {
+        normal: '一般照片報告',
+        defect: '缺失照片整改報告',
+        report: '專案報告用照片表',
+        all: '巡檢照片綜合報告'
+      };
+      const reportSubTitle = typeTitleMap[exportType] || '巡檢照片報告';
+
+      // Convert images base64 to Uint8Array
+      const processedImages = [];
+      for (const item of items) {
+        const u8arr = base64ToUint8Array(item.dataUrl);
+        processedImages.push({
+          ...item,
+          uint8Array: u8arr
+        });
+      }
+
+      // Build Table Rows:
+      // Table columns = 2 (永遠固定是2)
+      // Every photo row has 2 cells max.
+      // Every photo row is immediately followed by a caption row!
+      const tableRows = [];
+
+      for (let i = 0; i < processedImages.length; i += 2) {
+        const itemLeft = processedImages[i];
+        const itemRight = processedImages[i + 1] || null;
+
+        // Row 1: Photos row
+        const photoCells = [
+          new TableCell({
+            width: { size: colWidthTwip, type: WidthType.DXA },
+            margins: { top: 120, bottom: 80, left: 80, right: 80 },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new ImageRun({
+                    data: itemLeft.uint8Array,
+                    transformation: {
+                      width: imgWidthPx,
+                      height: imgHeightPx
+                    }
+                  })
+                ]
+              })
+            ]
+          })
+        ];
+
+        if (itemRight) {
+          photoCells.push(
+            new TableCell({
+              width: { size: colWidthTwip, type: WidthType.DXA },
+              margins: { top: 120, bottom: 80, left: 80, right: 80 },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [
+                    new ImageRun({
+                      data: itemRight.uint8Array,
+                      transformation: {
+                        width: imgWidthPx,
+                        height: imgHeightPx
+                      }
+                    })
+                  ]
+                })
+              ]
+            })
+          );
+        } else {
+          // Empty cell for odd count
+          photoCells.push(
+            new TableCell({
+              width: { size: colWidthTwip, type: WidthType.DXA },
+              children: [new Paragraph({})]
+            })
+          );
+        }
+
+        tableRows.push(new TableRow({ children: photoCells }));
+
+        // Row 2: Captions row (空白表格輸入照片檔名)
+        const captionCells = [
+          new TableCell({
+            width: { size: colWidthTwip, type: WidthType.DXA },
+            margins: { top: 100, bottom: 180, left: 80, right: 80 },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new TextRun({
+                    text: itemLeft.fileName,
+                    bold: true,
+                    size: 22 // 11pt
+                  })
+                ]
+              })
+            ]
+          })
+        ];
+
+        if (itemRight) {
+          captionCells.push(
+            new TableCell({
+              width: { size: colWidthTwip, type: WidthType.DXA },
+              margins: { top: 100, bottom: 180, left: 80, right: 80 },
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [
+                    new TextRun({
+                      text: itemRight.fileName,
+                      bold: true,
+                      size: 22 // 11pt
+                    })
+                  ]
+                })
+              ]
+            })
+          );
+        } else {
+          captionCells.push(
+            new TableCell({
+              width: { size: colWidthTwip, type: WidthType.DXA },
+              children: [new Paragraph({})]
+            })
+          );
+        }
+
+        tableRows.push(new TableRow({ children: captionCells }));
+      }
+
+      // Create Document with Narrow Margins (1.27 cm / 720 dxa)
+      const doc = new Document({
+        sections: [
+          {
+            properties: {
+              page: {
+                margin: {
+                  top: narrowMarginTwip,
+                  right: narrowMarginTwip,
+                  bottom: narrowMarginTwip,
+                  left: narrowMarginTwip
+                }
+              }
+            },
+            children: [
+              // Report Header Title
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 120 },
+                children: [
+                  new TextRun({
+                    text: task.name,
+                    bold: true,
+                    size: 32 // 16pt
+                  })
+                ]
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 240 },
+                children: [
+                  new TextRun({
+                    text: `【${reportSubTitle}】  產出日期：${getTodayFormatted()}  照片總數：${items.length} 張`,
+                    size: 20,
+                    color: "555555"
+                  })
+                ]
+              }),
+              // 2-Column Table
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: tableRows
+              })
+            ]
+          }
+        ]
+      });
+
+      // Generate blob & download
+      const blob = await Packer.toBlob(doc);
+      const downloadFileName = `${task.name}_${reportSubTitle}_${getTodayFormatted().replace(/\//g, '')}.docx`;
+      triggerBlobDownload(blob, downloadFileName);
+    }
+
+    function generateHtmlWordDocument(task, items, exportType) {
+      const typeTitleMap = {
+        normal: '一般照片報告',
+        defect: '缺失照片整改報告',
+        report: '專案報告用照片表',
+        all: '巡檢照片綜合報告'
+      };
+      const reportSubTitle = typeTitleMap[exportType] || '巡檢照片報告';
+
+      let tableHtml = '<table style="width:100%; border-collapse:collapse; margin-top:10px;">';
+
+      for (let i = 0; i < items.length; i += 2) {
+        const left = items[i];
+        const right = items[i + 1] || null;
+
+        // Photo Row (Fixed 8cm x 6cm landscape)
+        tableHtml += `
+          <tr>
+            <td style="width:50%; text-align:center; padding:6px; border:1px solid #d1d5db; vertical-align:middle;">
+              <img src="${left.dataUrl}" style="width:8cm; height:6cm; object-fit:cover; display:block; margin:auto;" />
+            </td>
+            <td style="width:50%; text-align:center; padding:6px; border:1px solid #d1d5db; vertical-align:middle;">
+              ${right ? `<img src="${right.dataUrl}" style="width:8cm; height:6cm; object-fit:cover; display:block; margin:auto;" />` : ''}
+            </td>
+          </tr>
+        `;
+
+        // Caption Row (空白表格輸入照片檔名)
+        tableHtml += `
+          <tr>
+            <td style="width:50%; text-align:center; padding:8px 6px; border:1px solid #d1d5db; font-size:11pt; font-weight:bold; font-family:Microsoft JhengHei, Arial;">
+              ${escapeHtml(left.fileName)}
+            </td>
+            <td style="width:50%; text-align:center; padding:8px 6px; border:1px solid #d1d5db; font-size:11pt; font-weight:bold; font-family:Microsoft JhengHei, Arial;">
+              ${right ? escapeHtml(right.fileName) : ''}
+            </td>
+          </tr>
+        `;
+      }
+
+      tableHtml += '</table>';
+
+      const fullHtml = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta charset="utf-8">
+          <title>${escapeHtml(task.name)}</title>
+          <!--[if gte mso 9]>
+          <xml>
+            <w:WordDocument>
+              <w:View>Print</w:View>
+              <w:Zoom>100</w:Zoom>
+              <w:DoNotOptimizeForBrowser/>
+            </w:WordDocument>
+          </xml>
+          <![endif]-->
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 1.27cm 1.27cm 1.27cm 1.27cm; /* Narrow Margins 邊界窄 */
+              mso-page-orientation: portrait;
+            }
+            body {
+              font-family: 'Microsoft JhengHei', '微軟正黑體', Arial, sans-serif;
+              margin: 0;
+              padding: 0;
+            }
+            h1 {
+              font-size: 16pt;
+              text-align: center;
+              margin-bottom: 4px;
+            }
+            p.meta {
+              font-size: 10pt;
+              color: #555;
+              text-align: center;
+              margin-bottom: 12px;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>${escapeHtml(task.name)}</h1>
+          <p class="meta">【${reportSubTitle}】 日期：${getTodayFormatted()} | 數量：共 ${items.length} 張</p>
+          ${tableHtml}
+        </body>
+        </html>
+      `;
+
+      const blob = new Blob(['\ufeff' + fullHtml], { type: 'application/msword' });
+      const downloadFileName = `${task.name}_${reportSubTitle}_${getTodayFormatted().replace(/\//g, '')}.doc`;
+      triggerBlobDownload(blob, downloadFileName);
+    }
+
+    function base64ToUint8Array(dataUrl) {
+      const base64Str = dataUrl.split(',')[1];
+      const binaryStr = window.atob(base64Str);
+      const len = binaryStr.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      return bytes;
+    }
+
+    function triggerBlobDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 300);
+    }
+
+    function openModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.classList.remove('hidden');
+      }
+    }
+
+    function closeModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.classList.add('hidden');
+      }
+    }
+
+    function showToast(msg, type = 'success') {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toastMsg');
+      const toastIcon = document.getElementById('toastIcon');
+
+      toastMsg.textContent = msg;
+      if (type === 'warning') {
+        toastIcon.className = 'fa-solid fa-triangle-exclamation text-amber-400';
+      } else if (type === 'info') {
+        toastIcon.className = 'fa-solid fa-spinner fa-spin text-blue-400';
+      } else {
+        toastIcon.className = 'fa-solid fa-check-circle text-emerald-400';
+      }
+
+      toast.classList.remove('opacity-0', '-translate-y-2', 'pointer-events-none');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', '-translate-y-2', 'pointer-events-none');
+        toast.classList.remove('opacity-100', 'translate-y-0');
+      }, 2500);
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>
